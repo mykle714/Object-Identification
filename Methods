@@ -1,0 +1,466 @@
+package test;
+
+import java.awt.image.BufferedImage;
+import java.io.StringWriter;
+import java.util.ArrayList;
+
+import boofcv.gui.image.ShowImages;
+import boofcv.io.image.ConvertBufferedImage;
+import boofcv.io.image.UtilImageIO;
+import boofcv.struct.image.ImageFloat32;
+
+public class MessingAround {
+	public MessingAround() {}
+	
+	public MessingAround(String path, String file, String type) {
+		hi = UtilImageIO.loadImage(path + "/" + file + type, ImageFloat32.class);
+		image = new float[hi.width][hi.height];
+		shrink(1);
+	}
+	
+	public MessingAround(String path, String file, String type, int shrink, boolean square) {
+		hi = UtilImageIO.loadImage(path + "/" + file + type, ImageFloat32.class);
+		shrink(shrink);
+		if(square)
+			square();
+	}
+	
+	//shrinks the image by an int factor
+	public void shrink(int divide) {
+
+		int squareW = divide;
+		int squareH = divide;
+		image = new float[hi.width/squareW+1][hi.height/squareH+1];
+		
+		for(int i = 0; i < hi.width; i += squareW) {
+			for(int j = 0; j < hi.height; j += squareH) {
+				image[i/squareW][j/squareH] = hi.get(i,j);
+			}
+		}
+		
+		writer = new StringWriter(image[0].length*image.length);
+	}
+	
+	//In ASCII, each character is taller than it is wide.
+	//This method reproportions the image back into nomral dimensions.
+	public void square() {
+		int squareW = 2;
+		int squareH = 3;
+		image = new float[hi.width/squareW+1][hi.height/squareH+1];
+		
+		for(int i = 0; i < hi.width; i += squareW) {
+			for(int j = 0; j < hi.height; j += squareH) {
+				image[i/squareW][j/squareH] = hi.get(i,j);
+			}
+		}
+		
+		writer = new StringWriter(image[0].length*image.length);
+	}
+	
+	//This is the main method for ASCII conversion
+	public void ascii(String path, String file, MyDictionary pack) {
+		WriteImage textFile = new WriteImage(path + "/" + file + ".txt");
+		
+		for(int i=0; i < image[0].length; i++) {
+			for(int j=0; j < image.length; j++) {
+				writer.append(shading(pack,i,j, image));
+			}
+			writer.append("\n");
+		}
+		textFile.writeToImage(writer.toString());
+	}
+
+	//Overloaded method to convert images other than the image stored in this class
+	public void ascii(String path, String file, MyDictionary pack, float[][] img) {
+		WriteImage textFile = new WriteImage(path + "/" + file + ".txt");
+
+		for(int i=0; i < img[0].length; i++) {
+			for(int j=0; j < img.length; j++) {
+				writer.append(shading(pack,i,j, img));
+			}
+			writer.append("\n");
+		}
+		textFile.writeToImage(writer.toString());
+	}
+	
+	//This method is used within ascii() to assign characters
+	public String shading(MyDictionary pack, int x, int y, float[][] img) {
+		String add = "";
+		int lastK = 256;
+		
+		pack.reset();
+		for(int i=0; i<pack.size(); i++) {
+			if(img[y][x] < lastK && img[y][x] >= (int) pack.getK()) {
+				add += (char) pack.getE();
+				break;
+			}
+		
+			lastK = (int) pack.getK();
+			pack.next();
+		}
+		return add;
+	}
+	
+	//pinpoint() is a method that returns the color of a coordinate.
+	//It also creates a line intersection on the image to show me where it is.
+	//This method was primarily used to aid me in developing the software.
+	public float pinPoint(int x, int y) {
+		int radius = 0;
+		int ymin = -radius;
+		int xmin = -radius;
+		int ymax = radius;
+		int xmax = radius;
+		
+		float temp = image[x][y];
+		
+		for(int i=0; i<image.length; i++) {
+			for(int j=ymin; j<=ymax; j++) {
+				image[i][y+j] = 255;
+			}
+		}
+		
+		for(int i=0; i<image[0].length; i++) {
+			for(int j=xmin; j<=xmax; j++) {
+				image[x+j][i] = 255;
+			}
+		}
+		
+		return temp;
+	}
+	
+	//convert() is used in display() to convert a float[][] into ImageFloat32
+	public ImageFloat32 convert(float[][] imagez) {
+		ImageFloat32 img = new ImageFloat32(imagez.length, imagez[0].length);
+		for(int i=0; i < imagez.length; i++) {
+			for(int j=0; j < imagez[0].length; j++) {
+				img.set(i, j, imagez[i][j]);
+			}
+		}
+		
+		return img;
+	}
+	
+	//displays an ImageFloat32
+	public void display() {
+		BufferedImage out = ConvertBufferedImage.convertTo(convert(image), null);
+		ShowImages.showWindow(out,"Output");
+	}
+	
+	//Overloaded display() to display things other than this class's image
+	public void display(float[][] img) {
+		BufferedImage out = ConvertBufferedImage.convertTo(convert(img), null);
+		ShowImages.showWindow(out,"Output");
+	}
+	
+	//outline() is the method that finds the differences between pixels of the original
+	public float[][] outline(String path, String file, double precision, boolean display, int shrink) {
+		Packs pack = new Packs();
+		float[][] derivH = new float[image.length-1][image[0].length-1];
+		float[][] derivV = new float[image.length-1][image[0].length-1];
+		float[][] outline = new float[image.length][image[0].length];
+		
+		for(int i=0; i < outline.length; i++) {
+			for(int j=0; j < outline[0].length; j++) {
+				outline[i][j] = 255;
+			}
+		}
+		
+		for(int i=0; i < derivH.length; i++) {
+			for(int j=0; j < derivH[0].length; j++) {
+				derivH[i][j] = Math.abs((image[i][j+1] - image[i][j])/(image[i][j+1]+1));
+				derivV[i][j] = Math.abs((image[i+1][j] - image[i][j])/(image[i+1][j]+1));
+				
+				if(derivH[i][j] > precision) {
+					outline[i][j] = 0;
+				}
+				
+				if(derivV[i][j] > precision) {
+					outline[i][j] = 0;
+				}
+
+			}
+		}
+		
+		outline = border(outline, shrink);
+		
+		ascii(path, file, pack.simple(), outline);
+		
+		if(display)
+			display(outline);
+		
+		return outline;
+	}
+	
+	//my lazy organization... the first one is the alternate overloaded one...
+	public float[][] outline(double precision, boolean display, int shrink) {
+		float[][] derivH = new float[image.length-1][image[0].length-1];
+		float[][] derivV = new float[image.length-1][image[0].length-1];
+		float[][] outline = new float[image.length][image[0].length];
+		
+		for(int i=0; i < outline.length; i++) {
+			for(int j=0; j < outline[0].length; j++) {
+				outline[i][j] = 255;
+			}
+		}
+		
+		for(int i=0; i < derivH.length; i++) {
+			for(int j=0; j < derivH[0].length; j++) {
+				derivH[i][j] = (image[i][j+1] - image[i][j])/image[i][j+1];
+				derivV[i][j] = (image[i+1][j] - image[i][j])/image[i+1][j];
+				
+				if(derivH[i][j] > precision) {
+					outline[i][j] = 0;
+				}
+				
+				if(derivV[i][j] > precision) {
+					outline[i][j] = 0;
+				}
+
+			}
+		}
+		
+		outline = border(outline, shrink);
+		
+		if(display)
+			display(outline);
+		
+		return outline;
+	}
+	
+	//flood find
+	public int[] area(int x, int y, int shrink) {
+		float[][] outline = outline(2, false, shrink);
+		
+		Spread spread = new Spread(x,y,outline);
+		
+		float[][] area = spread.spread();
+		
+		display(area);
+		
+		int xSum = 0;
+		int ySum = 0;
+		int count = 0;
+		
+		for  (int i=0; i < area.length; i++) {
+			for(int j=0; j < area[0].length; j++) {
+				if(area[i][j] == 0) {
+					xSum += j;
+					ySum += i;
+					count++;					
+				}
+			}
+		}
+		
+		int[] coord = new int[2];
+		
+		coord[0] = xSum/count;
+		coord[1] = ySum/count;
+		
+		return coord;
+	}
+	
+	//locates the centers of mass of the crystals.
+	public float[][] areaPinPoint(float[][] img, int shrink) {
+		int box = 3;
+		int sum = 0;
+		int factor = 8;
+		float[][] denseBox = new float[img.length/box][img[0].length/box];
+		boxes = new MyDictionary();
+		
+		for(int i=0; i < img.length-box; i+=box) {
+			for(int j=0; j < img[0].length-box; j+=box) {
+				for(int k=0; k < box; k++) {
+					for(int l=0; l < box; l++) {
+						sum += img[i+k][j+l];
+					}
+				}
+				
+//				System.out.println(sum);
+				
+				if(sum <= 255*factor) {
+					denseBox[i/box][j/box] = 255;
+				}
+				
+				sum = 0;
+			}
+		}
+		
+		display(denseBox);
+		
+		int sumX = 0;
+		int sumY = 0;
+		
+		for(int i=0; i < denseBox.length; i++) {
+			for(int j=0; j <denseBox[0].length; j++) {
+				if(denseBox[i][j] == 255) {
+					denseBox = findBox(denseBox, j, i);
+					
+					sumX = 0;
+					sumY = 0;
+					
+					for(int k=0; k < boxes.size(); k++) {
+	//					System.out.println(boxes.getK() + "\t" + boxes.getE());
+						sumX += (Integer) boxes.getK();
+						sumY += (Integer) boxes.getE();
+						
+						boxes.next();
+					}
+					
+					if(boxes.getCount() >= 10) {
+					
+						sumX = (sumX/boxes.getCount())*box;
+						sumY = (sumY/boxes.getCount())*box;
+						
+						for(int k=0; k < 5; k++) {
+							if(sumY+k < img.length && sumX < img[0].length)
+								img[sumY+k][sumX] = 125;
+							if(sumY-k >= 0 && sumX < img[0].length)
+								img[sumY-k][sumX] = 125;
+							if(sumX+k < img[0].length && sumX < img[0].length)
+								img[sumY][sumX+k] = 125;
+							if(sumX-k >= 0 && sumX < img[0].length)
+								img[sumY][sumX-k] = 125;
+						}
+					}
+					
+					boxes.reset();
+				}
+			}
+		}
+		
+		return img;
+	}
+	
+	private MyDictionary boxes;
+	
+	//an intermediate step to find the areas after noise reduction.
+	public float[][] findBox(float[][] denseBox, int x, int y) {
+		denseBox[y][x] = 0;
+		
+		if(boxes.getCount() > 50) {
+			return denseBox;
+		}
+
+		int range = 1;
+		
+		System.out.println(x + "\t" + y);
+
+		boxes.add(x,y);
+		
+		for(int i=1; i <= range; i++) {
+			if(y+range < denseBox.length && denseBox[y+range][x] == 255)
+				denseBox = findBox(denseBox, x, y+1);
+			
+			if(x+range < denseBox[0].length && denseBox[y][x+range] == 255)
+				denseBox = findBox(denseBox, x+1, y);
+			
+			if(y-range >= 0 && denseBox[y-range][x] == 255)
+				denseBox = findBox(denseBox, x, y-1);
+			
+			if(x-range >= 0 && denseBox[y][x-range] == 255)
+				denseBox = findBox(denseBox, x-1, y);
+		}
+		
+		return denseBox;
+	}
+	
+	//This method belongs with the ASCII methods,
+	//but it creates a white boarder around the image.
+	public float[][] border(float[][] img, int shrink) {
+		for(int i=0; i < img.length; i++) {
+			for(int j=0; j <= shrink; j++) {
+				img[i][j] = 0;
+				img[i][img[0].length-shrink-j-1] = 0;
+			}
+		}
+		
+		for(int i=0; i < img[0].length; i++) {
+			for(int j=0; j <= shrink; j++) {
+				img[j][i] = 0;
+				img[img.length-shrink-j-1][i] = 0;
+			}
+		}
+		
+		return img;
+	}
+	
+	//noise reduction method
+	//smaller radius will attack more clumped up noise, but will also affect actual lines
+	//factor is inversely proportional to radius somehow, I need to find the relationship.
+	public float[][] noise(float[][] img) {
+		double factor = .3;
+		int radius = 3;
+		int sum = 0;
+		float avg;
+		float[] ratios = new float[img.length*img[0].length];
+		int counter = 0;
+		
+		for(int i=radius; i < img.length-radius; i++) {
+			for(int j=radius; j < img[0].length-radius; j++) {
+				for(int k=-radius; k < radius*2+1-radius; k++) {
+					for(int l=-radius; l < radius*2+1-radius; l++) {
+						sum += img[k+i][l+j];
+					}
+				}
+				avg = (float) ((float)(sum)/Math.pow(radius*2+1, 2));
+				ratios[counter++] = img[i][j]/avg;
+				
+				if(avg > 255-255*factor) {
+					img[i][j] = 255;
+				}
+				sum = 0;
+			}
+		}
+		
+		return img;
+	}
+	
+	//second approach at noise reduction, I ended up using the first one.
+	public float[][] noiseTwo(float[][] img) {
+		int radius = 1;
+		int sum = 0;
+		float avg;
+		ArrayList<Difference> differences = new ArrayList<Difference>();
+		
+		for(int i=radius; i < img.length-radius; i++) {
+			for(int j=radius; j < img[0].length-radius; j++) {
+				for(int k=-radius; k < radius*2+1-radius; k++) {
+					for(int l=-radius; l < radius*2+1-radius; l++) {
+						sum += img[k+i][l+j];
+					}
+				}
+				avg = (float) ((float)(sum)/Math.pow(radius*2+1, 2));
+				differences.add(new Difference(j,i,img[i][j]/avg));
+			}
+		}
+		
+		for(int i=0; i < differences.size()-1; i++) {
+			differences.get(i).setD(differences.get(i).getR() - differences.get(i+1).getR());
+		}
+		
+		MergeSort sort = new MergeSort(differences);
+		differences = sort.get();
+		int max = 0;
+		
+		for(int i=0; i< differences.size(); i++) {
+			if(differences.get(i).getD() > differences.get(max).getD()) {
+				max = i;
+			}
+		}
+		
+		for(int i=0; i < differences.size(); i++) {
+			System.out.println(differences.get(i).getR());
+		}
+		
+		for(int i=0; i < max; i++) {
+			img[differences.get(i).getY()][differences.get(i).getX()] = 255;
+		}
+		
+		return img;
+	}
+	
+	private StringWriter writer;
+	private ImageFloat32 hi;
+	private float[][] image;
+	
+}
