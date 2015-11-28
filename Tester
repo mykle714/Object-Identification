@@ -1,0 +1,50 @@
+package test;
+//Michael Ren
+
+
+//todo list
+
+//fix time CHART
+//automatic shrink factor (boolean test purposes/overload) (lmao linear processing time bitches)
+//light detail pack
+//color
+//identify objects
+//adaptive color pack
+//invert dark background color
+//small scale packs
+//precise color packs
+//ASCII viewer
+//fix noiseTwo
+
+public class MessingAroundTester {
+	public static void main(String[] args) {
+		String path = "C:\\Users\\Michael\\Desktop";
+		String file = "IMG_3666";
+		String type = ".jpg";
+		int shrink = 2;
+		boolean square = false;
+		MessingAround hi = new MessingAround(path,file,type,shrink,square);
+		
+		Packs pack = new Packs();
+		
+//		System.out.println(hi.pinPoint(350,100));
+		
+		path = "C:/Users/Michael/Desktop";
+		file = "Test";
+//		hi.ascii(path, file, pack.pad());
+		
+//		hi.border(shrink);
+		
+		float[][] outline = hi.outline(path, file, .05, true, shrink);
+		
+		outline = hi.noise(outline);
+		
+		hi.display(outline);
+		
+		hi.display(hi.areaPinPoint(outline, shrink));
+		
+//		hi.display(hi.noiseTwo(outline));
+		
+//		int[] coord = hi.area(350,100); hi.pinPoint(coord[0], coord[1]); hi.display();
+	}
+}
